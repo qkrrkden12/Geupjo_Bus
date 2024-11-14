@@ -24,7 +24,6 @@ import androidx.compose.animation.*
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.geupjo_bus.api.BusApiClient
 import com.example.geupjo_bus.api.BusStop
-import com.example.geupjo_bus.api.BusArrival
 import com.google.accompanist.permissions.*
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -70,7 +69,12 @@ class MainActivity : ComponentActivity() {
                                 "search" -> BusStopSearchScreen(
                                     modifier = Modifier.padding(innerPadding),
                                     onBackClick = { currentScreen = "home" },
-                                    apiKey = "cvmPJ15BcYEn%2FRGNukBqLTRlCXkpITZSc6bWE7tWXdBSgY%2FeN%2BvzxH%2FROLnXu%2BThzVwBc09xoXfTyckHj1IJdg%3D%3D" // 실제 인증 키를 여기에 입력
+                                    apiKey = "cvmPJ15BcYEn%2FRGNukBqLTRlCXkpITZSc6bWE7tWXdBSgY%2FeN%2BvzxH%2FROLnXu%2BThzVwBc09xoXfTyckHj1IJdg%3D%3D",
+                                    onBusStopClick = { busStopName ->
+                                        // 버스 정류장 클릭 시 수행할 동작
+                                        Log.d("MainActivity", "Selected bus stop: $busStopName")
+                                        // 예: 특정 버스 정류장 도착 정보 화면으로 이동하거나 관련 동작 수행
+                                    }
                                 )
                                 "route" -> RouteSearchScreen(
                                     modifier = Modifier.padding(innerPadding),
@@ -193,21 +197,6 @@ fun BusAppContent(
     }
 
         Spacer(modifier = Modifier.height(16.dp))
-
-        //Text(
-            //text = "현재 위치 주변 정류장 도착 정보:",
-            //style = MaterialTheme.typography.titleMedium,
-            //modifier = Modifier.padding(bottom = 8.dp)
-        //)
-
-        //if (busArrivals.isNotEmpty()) {
-            //busArrivals.forEach { busArrival ->
-               // BusArrivalInfo(busNumber = busArrival.busNumber, arrivalTime = busArrival.arrivalTime)
-                //Spacer(modifier = Modifier.height(8.dp))
-            //}
-        //} else {
-           // Text("버스 도착 정보를 불러오는 중입니다...")
-        //}
     }
 
 

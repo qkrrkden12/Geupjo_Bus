@@ -13,12 +13,12 @@ interface BusApiService {
         @Query("gpsLong") longitude: Double
     ): Response<BusStopResponse>
 
-    // 버스 도착 정보 가져오기
-    //@GET("busArrivalInfo")
-    //suspend fun getBusArrivalInfo(
-    //@Query("serviceKey") apiKey: String = "yY52HVXXDhIkvRCoY8XPGoLBLjZ52jQv%2Br1P%2BA%2Ft9izCnDlOIJZVxSvljQx0yAyAWA4Vz9YnKwPTodc9lZriAw%3D%3D",  // 인증키 추가
-    //@Query("busStopId") busStopId: String
-    //): BusArrivalResponse
+    @GET("/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList")
+    suspend fun getBusArrivalInfo(
+        @Query("serviceKey") apiKey: String,
+        @Query("cityCode") cityCode: Int,
+        @Query("nodeId") nodeId: String
+    ): Response<BusArrivalResponse>
 
     @GET("1613000/BusSttnInfoInqireService/getSttnNoList")
     suspend fun searchBusStops(
@@ -28,4 +28,6 @@ interface BusApiService {
         @Query("cityCode") cityCode: Int,
         @Query("nodeNm") nodeNm: String
     ): Response<BusStopSearchResponse>
+
+
 }

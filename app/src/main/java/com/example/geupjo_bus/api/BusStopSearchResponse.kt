@@ -25,5 +25,7 @@ data class ItemsBody(
 @Root(name = "item", strict = false)
 data class BusStopItem(
     @field:Element(name = "nodenm", required = false)  // 여기에서 태그 이름을 nodenm으로 변경
-    var nodeName: String? = null
+    var nodeName: String? = null,
+    @field:Element(name = "nodeid", required = false)  // 여기에서 태그 이름을 nodenm으로 변경
+    var nodeId: String? = null,
 )

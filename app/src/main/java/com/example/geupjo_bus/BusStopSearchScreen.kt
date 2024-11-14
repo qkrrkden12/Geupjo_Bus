@@ -1,7 +1,9 @@
 package com.example.geupjo_bus
 
+import com.example.geupjo_bus.api.BusArrivalItem
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,15 +23,21 @@ import com.example.geupjo_bus.api.BusStopItem
 import com.example.geupjo_bus.ui.theme.Geupjo_BusTheme
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
+import kotlinx.coroutines.delay
 
 @Composable
 fun BusStopSearchScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit,
-    apiKey: String
+    apiKey: String,
+    onBusStopClick: (String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
-    var searchResults by remember { mutableStateOf(listOf<String>()) }
+    var searchResults by remember { mutableStateOf(listOf<BusStopItem>()) }
+    var showDialog by remember { mutableStateOf(false) }
+    var selectedBusStopName by remember { mutableStateOf("") }
+    var selectedBusStopId by remember { mutableStateOf("") }
+    var busArrivalInfo by remember { mutableStateOf("버스 도착 정보를 로드 중입니다...") }
     val coroutineScope = rememberCoroutineScope()
 
     Column(
@@ -72,30 +80,63 @@ fun BusStopSearchScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             searchResults.forEach { result ->
-                BusStopSearchResultItem(busStopName = result)
+                BusStopSearchResultItem(
+                    busStopName = result.nodeName ?: "알 수 없음",
+                    onClick = {
+                        selectedBusStopName = result.nodeName ?: "알 수 없음"
+                        selectedBusStopId = result.nodeId ?: ""
+                        showDialog = true
+                        coroutineScope.launch {
+                            busArrivalInfo = fetchBusArrivalInfo(selectedBusStopId, apiKey)
+                        }
+                        onBusStopClick(result.nodeName ?: "알 수 없음")
+                    }
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
         } else {
             Text(text = "검색 결과가 없습니다.", style = MaterialTheme.typography.bodyMedium)
         }
     }
+
+    // 15초마다 버스 도착 정보 업데이트
+    LaunchedEffect(showDialog, selectedBusStopId) {
+        while (showDialog) {
+            busArrivalInfo = fetchBusArrivalInfo(selectedBusStopId, apiKey)
+            delay(15000) // 15초마다 새로고침
+        }
+    }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(text = selectedBusStopName, style = MaterialTheme.typography.bodyMedium) },
+            text = { Text(busArrivalInfo) },
+            confirmButton = {
+                Button(onClick = { showDialog = false }) {
+                    Text("확인")
+                }
+            }
+        )
+    }
 }
 
 @Composable
-fun BusStopSearchResultItem(busStopName: String) {
+fun BusStopSearchResultItem(busStopName: String, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(16.dp)
+            .clickable(onClick = onClick)
     ) {
         Text(text = busStopName, style = MaterialTheme.typography.titleMedium)
     }
 }
 
-// 실제 API 호출 함수
-suspend fun searchBusStopsFromApi(query: String, apiKey: String): List<String> {
+// 정류장 검색 API 호출 함수
+suspend fun searchBusStopsFromApi(query: String, apiKey: String): List<BusStopItem> {
     return try {
         val decodedKey = URLDecoder.decode(apiKey, "UTF-8")
         val response = BusApiClient.apiService.searchBusStops(
@@ -105,16 +146,8 @@ suspend fun searchBusStopsFromApi(query: String, apiKey: String): List<String> {
         )
 
         if (response.isSuccessful) {
-            Log.d("Raw XML Response", response.raw().toString())
-            Log.d("Parsed XML Response", response.body().toString())
             val bodyResponse: List<BusStopItem>? = response.body()?.body?.items?.itemList
-            Log.d("API Response Parsed Items", "Items: $bodyResponse")
-
-            bodyResponse?.forEachIndexed { index, item ->
-                Log.d("API Response Item $index", "nodeName: ${item.nodeName}")
-            }
-
-            bodyResponse?.mapNotNull { it.nodeName } ?: emptyList()
+            bodyResponse ?: emptyList()
         } else {
             Log.e("API Error", "API 호출 실패 - 코드: ${response.code()}, 메시지: ${response.message()}")
             emptyList()
@@ -125,13 +158,43 @@ suspend fun searchBusStopsFromApi(query: String, apiKey: String): List<String> {
     }
 }
 
+// 버스 도착 정보 조회 API 호출 함수
+suspend fun fetchBusArrivalInfo(busStopId: String, apiKey: String): String {
+    return try {
+        val decodedKey = URLDecoder.decode(apiKey, "UTF-8")
+        val response = BusApiClient.apiService.getBusArrivalInfo(
+            apiKey = decodedKey,
+            cityCode = 38030,
+            nodeId = busStopId
+        )
+
+        if (response.isSuccessful) {
+            response.body()?.body?.items?.itemList?.joinToString("\n") { item ->
+                val routeNo = item.routeNo ?: "알 수 없음"
+                val arrTime = (item.arrTime ?: 0) / 60  // 초 단위 -> 분 단위 변환
+                val arrPrevStationCnt = item.arrPrevStationCnt ?: "알 수 없음"
+                "$routeNo 번 버스 - 약 ${arrTime}분 후 도착 (남은 정류장: ${arrPrevStationCnt}개)"
+            } ?: "도착 정보 없음"
+        } else {
+            "도착 정보를 가져오는 데 실패했습니다. 코드: ${response.code()}, 메시지: ${response.message()}"
+        }
+    } catch (e: Exception) {
+        Log.e("API Error", "도착 정보 호출 오류: ${e.message}")
+        "도착 정보를 가져오는 중 오류가 발생했습니다."
+    }
+}
+
+
 @Preview(showBackground = true)
 @Composable
 fun PreviewBusStopSearchScreen() {
     Geupjo_BusTheme {
         BusStopSearchScreen(
             onBackClick = {},
-            apiKey = "DUMMY_API_KEY"
+            apiKey = "DUMMY_API_KEY",
+            onBusStopClick = { busStopName ->
+                Log.d("Preview", "Clicked on bus stop: $busStopName")
+            }
         )
     }
 }

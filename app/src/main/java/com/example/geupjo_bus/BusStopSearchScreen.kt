@@ -13,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
@@ -24,7 +23,9 @@ import com.example.geupjo_bus.ui.theme.Geupjo_BusTheme
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
 import kotlinx.coroutines.delay
+import androidx.compose.material3.ExperimentalMaterial3Api
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BusStopSearchScreen(
     modifier: Modifier = Modifier,
@@ -44,24 +45,33 @@ fun BusStopSearchScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
     ) {
-        Button(onClick = onBackClick, modifier = Modifier.align(Alignment.Start)) {
-            Text("뒤로 가기")
+        Button(
+            onClick = onBackClick,
+            modifier = Modifier.align(Alignment.Start),
+            colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.primary)
+        ) {
+            Text("뒤로 가기", color = MaterialTheme.colorScheme.onPrimary)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "정류장 검색", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "정류장 검색",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
         Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
             value = searchQuery,
-            onValueChange = { newValue ->
-                searchQuery = newValue
-            },
+            onValueChange = { newValue -> searchQuery = newValue },
             label = { Text("정류장 이름 입력") },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
             singleLine = true,
             keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(
@@ -70,13 +80,21 @@ fun BusStopSearchScreen(
                         searchResults = searchBusStopsFromApi(searchQuery.text, apiKey)
                     }
                 }
+            ),
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                cursorColor = MaterialTheme.colorScheme.primary
             )
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         if (searchResults.isNotEmpty()) {
-            Text(text = "검색 결과:", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "검색 결과:",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
             Spacer(modifier = Modifier.height(8.dp))
 
             searchResults.forEach { result ->
@@ -95,28 +113,40 @@ fun BusStopSearchScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
         } else {
-            Text(text = "검색 결과가 없습니다.", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "검색 결과가 없습니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground
+            )
         }
     }
 
-    // 15초마다 버스 도착 정보 업데이트
     LaunchedEffect(showDialog, selectedBusStopId) {
         while (showDialog) {
             busArrivalInfo = fetchBusArrivalInfo(selectedBusStopId, apiKey)
-            delay(15000) // 15초마다 새로고침
+            delay(15000)
         }
     }
 
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text(text = selectedBusStopName, style = MaterialTheme.typography.bodyMedium) },
-            text = { Text(busArrivalInfo) },
+            title = {
+                Text(
+                    text = selectedBusStopName,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            },
+            text = {
+                Text(busArrivalInfo, color = MaterialTheme.colorScheme.onBackground)
+            },
             confirmButton = {
                 Button(onClick = { showDialog = false }) {
                     Text("확인")
                 }
-            }
+            },
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 }
@@ -127,11 +157,18 @@ fun BusStopSearchResultItem(busStopName: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.medium
+            )
             .padding(16.dp)
             .clickable(onClick = onClick)
     ) {
-        Text(text = busStopName, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = busStopName,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -183,7 +220,6 @@ suspend fun fetchBusArrivalInfo(busStopId: String, apiKey: String): String {
         "도착 정보를 가져오는 중 오류가 발생했습니다."
     }
 }
-
 
 @Preview(showBackground = true)
 @Composable

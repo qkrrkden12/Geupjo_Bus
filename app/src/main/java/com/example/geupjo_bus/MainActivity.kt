@@ -1,5 +1,7 @@
 package com.example.geupjo_bus
 
+import com.example.geupjo_bus.api.BusArrivalItem
+import androidx.compose.ui.Alignment
 import com.example.geupjo_bus.BusStopSearchScreen
 import java.net.URLDecoder
 import android.Manifest
@@ -122,24 +124,25 @@ fun BusAppContent(
     var busStops by remember { mutableStateOf<List<BusStop>>(emptyList()) }
     var latitude by remember { mutableStateOf<Double?>(null) }
     var longitude by remember { mutableStateOf<Double?>(null) }
+    var selectedBusStop by remember { mutableStateOf<BusStop?>(null) }
+    var busArrivalInfo by remember { mutableStateOf<List<BusArrivalItem>>(emptyList()) }
+    var showDialog by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
+
 
     val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(context)
     val locationPermissionState = rememberPermissionState(permission = Manifest.permission.ACCESS_FINE_LOCATION)
 
-    // 현재 위치 가져오기 로직
     LaunchedEffect(Unit) {
         if (locationPermissionState.status.isGranted) {
             getCurrentLocation(context, fusedLocationClient) { lat, lng ->
                 latitude = lat
                 longitude = lng
-                // 주변 정류장 정보 가져오기
                 coroutineScope.launch {
                     try {
-                        // 서비스 키를 URL 디코딩하여 변수에 저장
                         val encodedKey = "cvmPJ15BcYEn%2FRGNukBqLTRlCXkpITZSc6bWE7tWXdBSgY%2FeN%2BvzxH%2FROLnXu%2BThzVwBc09xoXfTyckHj1IJdg%3D%3D"
                         val apiKey = URLDecoder.decode(encodedKey, "UTF-8")
 
-                        // API 호출
                         val response = BusApiClient.apiService.getNearbyBusStops(
                             apiKey = apiKey,
                             latitude = latitude!!,
@@ -147,22 +150,13 @@ fun BusAppContent(
                         )
 
                         if (response.isSuccessful) {
-                            // 성공한 경우 응답 본문 출력
                             val responseBody = response.body()
-                            busStops = responseBody?.body?.items?.itemList?.take(4) ?: emptyList()  // 최대 4개의 정류장만 표시
-                            Log.d("API Response", "정류장 목록: $busStops")
-
-                            // 전체 응답의 Raw 데이터 출력
-                            Log.d("API Response Raw", response.raw().toString())
+                            busStops = responseBody?.body?.items?.itemList?.take(4) ?: emptyList()
                         } else {
-                            // 실패한 경우 오류 코드와 메시지 출력
-                            val errorBody = response.errorBody()?.string()
-                            Log.e("API Error", "API 호출 실패 - 코드: ${response.code()}, 메시지: ${response.message()}")
-                            Log.e("API Error Body", "오류 응답 본문: $errorBody")
+                            Log.e("API Error", "API 호출 실패: ${response.code()}, ${response.message()}")
                         }
                     } catch (e: Exception) {
-                        // 예외 발생 시 오류 메시지 출력
-                        Log.e("API Error", "정류장 목록을 가져오는데 실패했습니다. ${e.message}")
+                        Log.e("API Error", "정류장 목록 로드 실패: ${e.message}")
                     }
                 }
             }
@@ -186,27 +180,148 @@ fun BusAppContent(
         if (busStops.isNotEmpty()) {
             busStops.forEach { busStop ->
                 NearbyBusStop(
-                    busStopName = busStop.nodeName ?: "알 수 없음", // nodeName이 null이면 "알 수 없음"으로 기본값 제공
-                    distance = busStop.nodeNumber ?: "알 수 없음"  // nodeNumber가 null이면 "알 수 없음"으로 기본값 제공
+                    busStopName = busStop.nodeName ?: "알 수 없음",
+                    distance = busStop.nodeNumber ?: "알 수 없음",
+                    onClick = {
+                        selectedBusStop = busStop
+                        coroutineScope.launch {
+                            isLoading = true // 로딩 시작
+                            try {
+                                val apiKey = URLDecoder.decode("cvmPJ15BcYEn%2FRGNukBqLTRlCXkpITZSc6bWE7tWXdBSgY%2FeN%2BvzxH%2FROLnXu%2BThzVwBc09xoXfTyckHj1IJdg%3D%3D", "UTF-8")
+                                val response = BusApiClient.apiService.getBusArrivalInfo(
+                                    apiKey = apiKey,
+                                    cityCode = 38030, // 진주시 코드
+                                    nodeId = busStop.nodeId!!
+                                )
+                                if (response.isSuccessful) {
+                                    // 도착 정보를 arrTime(예상 도착 시간) 기준으로 정렬
+                                    busArrivalInfo = response.body()?.body?.items?.itemList
+                                        ?.sortedBy { it.arrTime ?: Int.MAX_VALUE } // null은 가장 뒤로 이동
+                                        ?: emptyList()
+
+                                    if (busArrivalInfo.isEmpty()) {
+                                        Log.d("Bus Info", "도착 버스 정보가 없습니다.")
+                                    }
+                                } else {
+                                    Log.e("API Error", "도착 정보 호출 실패: ${response.code()}, ${response.message()}")
+                                }
+                            } catch (e: Exception) {
+                                Log.e("API Error", "도착 정보 로드 실패: ${e.message}")
+                            } finally {
+                                isLoading = false // 로딩 종료
+                                showDialog = true // 다이얼로그 표시
+                            }
+                        }
+                    }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
+
         } else {
             Text("주변 정류장 정보를 불러오는 중입니다...")
         }
     }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    if (showDialog && selectedBusStop != null) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = {
+                Text(
+                    text = "버스 도착 정보: ${selectedBusStop?.nodeName}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            },
+            text = {
+                when {
+                    busArrivalInfo.isEmpty() && !isLoading -> {
+                        // 도착 정보가 없을 때
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "도착 버스 정보가 없습니다.",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    isLoading -> {
+                        // 로딩 중일 때
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("버스 도착 정보를 불러오는 중입니다...")
+                        }
+                    }
+                    else -> {
+                        // 데이터 로드 완료 후
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            busArrivalInfo.forEach { arrival ->
+                                val arrivalMinutes = arrival.arrTime?.div(60) ?: 0
+                                val remainingStations = arrival.arrPrevStationCnt ?: 0
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    shape = MaterialTheme.shapes.medium,
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp)
+                                    ) {
+                                        Text(
+                                            text = "버스 번호: ${arrival.routeNo}",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "예상 도착 시간: ${arrivalMinutes}분 (${remainingStations}개 정류장)",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("확인", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        )
     }
 
 
+}
+
+
 @Composable
-fun NearbyBusStop(busStopName: String, distance: String) {
+fun NearbyBusStop(busStopName: String, distance: String, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable (onClick = onClick)
             .padding(16.dp)
     ) {
         Text(text = busStopName, style = MaterialTheme.typography.titleMedium)

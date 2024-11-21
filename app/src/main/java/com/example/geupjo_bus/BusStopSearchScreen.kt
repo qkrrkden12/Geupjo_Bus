@@ -1,6 +1,5 @@
 package com.example.geupjo_bus
 
-import com.example.geupjo_bus.api.BusArrivalItem
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,8 +21,11 @@ import com.example.geupjo_bus.api.BusStopItem
 import com.example.geupjo_bus.ui.theme.Geupjo_BusTheme
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
-import kotlinx.coroutines.delay
 import androidx.compose.material3.ExperimentalMaterial3Api
+import com.example.geupjo_bus.api.BusRouteItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +40,7 @@ fun BusStopSearchScreen(
     var showDialog by remember { mutableStateOf(false) }
     var selectedBusStopName by remember { mutableStateOf("") }
     var selectedBusStopId by remember { mutableStateOf("") }
-    var busArrivalInfo by remember { mutableStateOf("버스 도착 정보를 로드 중입니다...") }
+    var busRouteInfo by remember { mutableStateOf("경유 노선 정보를 로드 중입니다...") }
     val coroutineScope = rememberCoroutineScope()
 
     Column(
@@ -46,8 +48,8 @@ fun BusStopSearchScreen(
             .fillMaxSize()
             .padding(16.dp)
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
     ) {
+        // 뒤로가기 버튼
         Button(
             onClick = onBackClick,
             modifier = Modifier.align(Alignment.Start),
@@ -58,20 +60,25 @@ fun BusStopSearchScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 검색 제목
         Text(
             text = "정류장 검색",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.primary
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
         )
-        Spacer(modifier = Modifier.height(8.dp))
 
+        // 검색 입력 필드
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { newValue -> searchQuery = newValue },
             label = { Text("정류장 이름 입력") },
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = "검색 아이콘")
+            },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+                .padding(vertical = 8.dp),
             singleLine = true,
             keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(
@@ -89,6 +96,7 @@ fun BusStopSearchScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 검색 결과 표시
         if (searchResults.isNotEmpty()) {
             Text(
                 text = "검색 결과:",
@@ -97,37 +105,39 @@ fun BusStopSearchScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            searchResults.forEach { result ->
-                BusStopSearchResultItem(
-                    busStopName = result.nodeName ?: "알 수 없음",
-                    onClick = {
-                        selectedBusStopName = result.nodeName ?: "알 수 없음"
-                        selectedBusStopId = result.nodeId ?: ""
-                        showDialog = true
-                        coroutineScope.launch {
-                            busArrivalInfo = fetchBusArrivalInfo(selectedBusStopId, apiKey)
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                searchResults.forEach { result ->
+                    BusStopSearchResultItem(
+                        busStopName = result.nodeName ?: "알 수 없음",
+                        onClick = {
+                            val currentBusStopId = result.nodeId ?: ""
+                            selectedBusStopName = result.nodeName ?: "알 수 없음"
+                            showDialog = true
+                            coroutineScope.launch {
+                                showDialog = false // Dialog를 닫아서 상태를 초기화
+                                busRouteInfo = "경유 노선 정보를 로드 중입니다..."
+                                busRouteInfo = fetchBusRoutesByStop(currentBusStopId, apiKey)
+                                Log.d("UI Update", "BusRouteInfo 업데이트 완료: $busRouteInfo")
+                                showDialog = true // Dialog를 다시 열어서 업데이트된 값을 렌더링
+                            }
+                            onBusStopClick(result.nodeName ?: "알 수 없음")
                         }
-                        onBusStopClick(result.nodeName ?: "알 수 없음")
-                    }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
         } else {
+            // 결과 없음 텍스트
             Text(
                 text = "검색 결과가 없습니다.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         }
     }
 
-    LaunchedEffect(showDialog, selectedBusStopId) {
-        while (showDialog) {
-            busArrivalInfo = fetchBusArrivalInfo(selectedBusStopId, apiKey)
-            delay(15000)
-        }
-    }
-
+    // AlertDialog
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
@@ -139,40 +149,48 @@ fun BusStopSearchScreen(
                 )
             },
             text = {
-                Text(busArrivalInfo, color = MaterialTheme.colorScheme.onBackground)
+                Text(
+                    text = busRouteInfo,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(8.dp)
+                )
             },
             confirmButton = {
                 Button(onClick = { showDialog = false }) {
                     Text("확인")
                 }
             },
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.large
         )
     }
 }
 
 @Composable
 fun BusStopSearchResultItem(busStopName: String, onClick: () -> Unit) {
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.medium
-            )
-            .padding(16.dp)
             .clickable(onClick = onClick)
+            .padding(4.dp),
+        elevation = CardDefaults.elevatedCardElevation(),
+        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface)
     ) {
-        Text(
-            text = busStopName,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = busStopName,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }
 
-// 정류장 검색 API 호출 함수
+
 suspend fun searchBusStopsFromApi(query: String, apiKey: String): List<BusStopItem> {
     return try {
         val decodedKey = URLDecoder.decode(apiKey, "UTF-8")
@@ -183,8 +201,7 @@ suspend fun searchBusStopsFromApi(query: String, apiKey: String): List<BusStopIt
         )
 
         if (response.isSuccessful) {
-            val bodyResponse: List<BusStopItem>? = response.body()?.body?.items?.itemList
-            bodyResponse ?: emptyList()
+            response.body()?.body?.items?.itemList ?: emptyList()
         } else {
             Log.e("API Error", "API 호출 실패 - 코드: ${response.code()}, 메시지: ${response.message()}")
             emptyList()
@@ -195,31 +212,37 @@ suspend fun searchBusStopsFromApi(query: String, apiKey: String): List<BusStopIt
     }
 }
 
-// 버스 도착 정보 조회 API 호출 함수
-suspend fun fetchBusArrivalInfo(busStopId: String, apiKey: String): String {
+suspend fun fetchBusRoutesByStop(busStopId: String, apiKey: String): String {
     return try {
+        Log.d("fetchBusRoutesByStop", "전달된 BusStopId: $busStopId")
         val decodedKey = URLDecoder.decode(apiKey, "UTF-8")
-        val response = BusApiClient.apiService.getBusArrivalInfo(
+        val response = BusApiClient.apiService.getBusRoutesByStop(
             apiKey = decodedKey,
             cityCode = 38030,
-            nodeId = busStopId
+            nodeId = busStopId,  // 'nodeId'를 Retrofit 인터페이스에 맞게 전달
+            numOfRows = 10,      // 필요한 요청 수
+            pageNo = 1           // 페이지 번호
         )
+
+        // 요청 URL 확인
+        Log.d("Retrofit URL", "Final URL: ${response.raw().request.url}")
 
         if (response.isSuccessful) {
             response.body()?.body?.items?.itemList?.joinToString("\n") { item ->
                 val routeNo = item.routeNo ?: "알 수 없음"
-                val arrTime = (item.arrTime ?: 0) / 60  // 초 단위 -> 분 단위 변환
-                val arrPrevStationCnt = item.arrPrevStationCnt ?: "알 수 없음"
-                "$routeNo 번 버스 - 약 ${arrTime}분 후 도착 (남은 정류장: ${arrPrevStationCnt}개)"
-            } ?: "도착 정보 없음"
+                val endNodeName = item.endNodeName ?: "알 수 없음"
+                "$routeNo 번 버스 - ($endNodeName 방향)"
+            } ?: "해당 정류장의 경유 노선 정보가 없습니다."
         } else {
-            "도착 정보를 가져오는 데 실패했습니다. 코드: ${response.code()}, 메시지: ${response.message()}"
+            Log.e("API Error", "Failed with Code: ${response.code()}, Message: ${response.message()}")
+            "경유 노선 정보를 가져오는 데 실패했습니다."
         }
     } catch (e: Exception) {
-        Log.e("API Error", "도착 정보 호출 오류: ${e.message}")
-        "도착 정보를 가져오는 중 오류가 발생했습니다."
+        Log.e("API Exception", "오류 발생: ${e.message}")
+        "경유 노선 정보를 가져오는 중 오류가 발생했습니다."
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable

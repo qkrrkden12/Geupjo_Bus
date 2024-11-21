@@ -29,5 +29,16 @@ interface BusApiService {
         @Query("nodeNm") nodeNm: String
     ): Response<BusStopSearchResponse>
 
+    @GET("/1613000/BusSttnInfoInqireService/getSttnThrghRouteList")
+    suspend fun getBusRoutesByStop(
+        @Query("serviceKey") apiKey: String,
+        @Query("cityCode") cityCode: Int,
+        @Query("nodeid") nodeId: String,  // 'nodeId' 대신 'nodeid'로 수정
+        @Query("numOfRows") numOfRows: Int = 10, // 기본값 10
+        @Query("pageNo") pageNo: Int = 1         // 기본값 1
+    ): Response<BusStopRouteResponse>
+
+
+
 
 }

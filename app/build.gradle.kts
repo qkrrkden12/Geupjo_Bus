@@ -69,6 +69,7 @@ dependencies {
     implementation ("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.3")  // 버전은 상황에 따라 다를 수 있음
     implementation ("com.google.android.gms:play-services-maps:18.0.0")
     implementation(libs.androidx.appcompat)
+    implementation(libs.material)
 
 
     testImplementation(libs.junit)
